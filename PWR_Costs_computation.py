@@ -75,9 +75,11 @@ class ProjectParameters:
     spent_fuel_backend: str = "direct disposal"  # "direct disposal" or "reprocessing"
 
     # --- Transport distances (km) ---
-    distance_U_nat_transport_km: float = 5000.0       # mine / conversion / enrichment to plant
-    distance_U_enriched_transport_km: float = 3000.0  # enrichment to fuel fabrication / plant
+    distance_U_nat_transport_km: float = 5000.0       # mine to conversion plant
+    distance_U_converted_transport_km: float = 1200.0  # conversion plant to enrichment plant
+    distance_U_enriched_transport_km: float = 100.0  # enrichment plant to fuel fabrication plant
     distance_fresh_fuel_transport_km: float = 1000.0  # fuel fabrication plant to reactor site
+    distance_spent_fuel_transport_km: float = 500.0   # reactor site to disposal/reprocessing facility
     
     def __post_init__(self):
         # Convert UO2 mass per assembly to uranium metal mass
@@ -101,18 +103,22 @@ class CostParameters:
     price_U_nat_per_kg_USD: float = 190.0
     transport_U_nat_per_kg_per_km_USD: float = 0.04e-3  # $/kgU/km
 
-    # Conversion + enrichment (SWU)
+    # Conversion
     conversion_per_kgU_USD: float = 15.0
+    transport_U_converted_per_kgU_per_km_USD: float = 0.05e-3  # $/kgU/km
+
+    # Enrichment (SWU)
     price_SWU_per_SWU_USD: float = 140.0
-    transport_U_enriched_per_kgU_per_km_USD: float = 1.0e-3
+    transport_U_enriched_per_kgU_per_km_USD: float = 1.0e-3  # $/kgU/km
 
     # Fuel fabrication
     fabrication_per_kgFreshFuel_USD: float = 250.0
-    transport_fuel_per_kgFreshFuel_per_km_USD: float = 5.0e-3
+    transport_fuel_per_kgFreshFuel_per_km_USD: float = 5.0e-3  # $/kg fresh fuel/km
 
     # --- Back-end fuel cycle costs ---
     # Direct disposal of spent fuel (simplified)
     direct_disposal_per_kgSpentFuel_USD: float = 1300.0
+    transport_spent_fuel_per_kg_per_km_USD: float = 6.0e-3  # $/kg spent fuel/km
 
 
 # ============================================================
@@ -143,18 +149,20 @@ def fuel_cycle_cost_USD_per_year(project: ProjectParameters, costs: CostParamete
     """
     Annual fuel cycle cost ($/year):
     - Natural uranium
-    - Natural uranium transport
+    - Natural uranium transport (mine to conversion)
     - Conversion
+    - Converted uranium transport (conversion to enrichment)
     - Enrichment (SWU)
-    - Enriched uranium transport
+    - Enriched uranium transport (enrichment to fabrication)
     - Fuel fabrication
-    - Fresh fuel transport
+    - Fresh fuel transport (fabrication to reactor)
     - Back-end of the cycle (spent fuel)
+    - Spent fuel transport (reactor to disposal)
     """
     # Product mass (enriched uranium) per year
     product_mass_kg = annual_enriched_U_mass_kg(project)
 
-    # Optimize front-end (natural U + transport + conversion + enrichment)
+    # Optimize front-end (natural U + natural U transport + conversion + converted U transport + enrichment)
     front_end = optimize_front_end_uranium_cost(
         product_mass_kg=product_mass_kg,
         x_U_nat=project.x_U_nat,
@@ -164,13 +172,17 @@ def fuel_cycle_cost_USD_per_year(project: ProjectParameters, costs: CostParamete
         price_SWU_per_SWU_USD=costs.price_SWU_per_SWU_USD,
         transport_U_nat_per_kg_per_km_USD=costs.transport_U_nat_per_kg_per_km_USD,
         distance_U_nat_transport_km=project.distance_U_nat_transport_km,
+        transport_U_converted_per_kgU_per_km_USD=costs.transport_U_converted_per_kgU_per_km_USD,
+        distance_U_converted_transport_km=project.distance_U_converted_transport_km,
     )
 
     cost_U_nat = front_end["cost_U_nat_USD"]
     cost_transport_nat = front_end["cost_transport_U_nat_USD"]
     cost_conversion = front_end["cost_conversion_USD"]
+    cost_transport_converted = front_end["cost_transport_U_converted_USD"]
     cost_swu = front_end["cost_enrichment_USD"]
-    # Enriched uranium transport
+    
+    # Enriched uranium transport (enrichment to fabrication)
     cost_transport_enriched = (
         product_mass_kg
         * costs.transport_U_enriched_per_kgU_per_km_USD
@@ -180,7 +192,7 @@ def fuel_cycle_cost_USD_per_year(project: ProjectParameters, costs: CostParamete
     # Fuel fabrication and transport (USD/year)
     fresh_fuel_mass_UO2_kg = annual_fresh_fuel_mass_kg(project)
     cost_fabrication = fresh_fuel_mass_UO2_kg * costs.fabrication_per_kgFreshFuel_USD
-    cost_transport_fabricated = (
+    cost_transport_fresh_fuel = (
         fresh_fuel_mass_UO2_kg
         * costs.transport_fuel_per_kgFreshFuel_per_km_USD
         * project.distance_fresh_fuel_transport_km
@@ -189,16 +201,25 @@ def fuel_cycle_cost_USD_per_year(project: ProjectParameters, costs: CostParamete
     # Back-end cycle (assume discharged mass ≈ fresh fuel mass)
     kg_spent_fuel = fresh_fuel_mass_UO2_kg
     cost_backend = kg_spent_fuel * costs.direct_disposal_per_kgSpentFuel_USD
+    
+    # Spent fuel transport (reactor to disposal)
+    cost_transport_spent_fuel = (
+        kg_spent_fuel
+        * costs.transport_spent_fuel_per_kg_per_km_USD
+        * project.distance_spent_fuel_transport_km
+    )
 
     total_fuel_cycle_USD = (
         cost_U_nat
         + cost_transport_nat
         + cost_conversion
+        + cost_transport_converted
         + cost_swu
         + cost_transport_enriched
         + cost_fabrication
-        + cost_transport_fabricated
+        + cost_transport_fresh_fuel
         + cost_backend
+        + cost_transport_spent_fuel
     )
 
     return total_fuel_cycle_USD
@@ -216,14 +237,17 @@ def detailed_fuel_cycle_breakdown_USD_per_year(project: ProjectParameters, costs
         price_SWU_per_SWU_USD=costs.price_SWU_per_SWU_USD,
         transport_U_nat_per_kg_per_km_USD=costs.transport_U_nat_per_kg_per_km_USD,
         distance_U_nat_transport_km=project.distance_U_nat_transport_km,
+        transport_U_converted_per_kgU_per_km_USD=costs.transport_U_converted_per_kgU_per_km_USD,
+        distance_U_converted_transport_km=project.distance_U_converted_transport_km,
     )
 
     fresh_fuel_mass_UO2_kg = annual_fresh_fuel_mass_kg(project)
 
     cost_U_nat = front_end["cost_U_nat_USD"]
     cost_transport_nat = front_end["cost_transport_U_nat_USD"]
-
     cost_conversion = front_end["cost_conversion_USD"]
+    cost_transport_converted = front_end["cost_transport_U_converted_USD"]
+    
     cost_enrichment = front_end["cost_enrichment_USD"]
     cost_transport_enriched = (
         product_mass_kg
@@ -232,23 +256,32 @@ def detailed_fuel_cycle_breakdown_USD_per_year(project: ProjectParameters, costs
     )
 
     cost_fabrication = fresh_fuel_mass_UO2_kg * costs.fabrication_per_kgFreshFuel_USD
-    cost_transport_fuel = (
+    cost_transport_fresh_fuel = (
         fresh_fuel_mass_UO2_kg
         * costs.transport_fuel_per_kgFreshFuel_per_km_USD
         * project.distance_fresh_fuel_transport_km
     )
 
     cost_back_end = fresh_fuel_mass_UO2_kg * costs.direct_disposal_per_kgSpentFuel_USD
+    
+    # Spent fuel transport (reactor to disposal)
+    cost_transport_spent_fuel = (
+        fresh_fuel_mass_UO2_kg
+        * costs.transport_spent_fuel_per_kg_per_km_USD
+        * project.distance_spent_fuel_transport_km
+    )
 
     return {
         "U_nat": cost_U_nat,
         "transport_U_nat": cost_transport_nat,
         "conversion": cost_conversion,
+        "transport_U_converted": cost_transport_converted,
         "SWU": cost_enrichment,
         "transport_U_enriched": cost_transport_enriched,
         "fabrication": cost_fabrication,
-        "transport_fuel": cost_transport_fuel,
+        "transport_fresh_fuel": cost_transport_fresh_fuel,
         "back_end": cost_back_end,
+        "transport_spent_fuel": cost_transport_spent_fuel,
     }
 
 
@@ -468,13 +501,15 @@ def compute_discounted_fuel_cycle_breakdown(project: ProjectParameters, costs: C
     
     Returns a dictionary with discounted costs for each fuel cycle component:
     - "U_nat": natural uranium
-    - "transport_U_nat": natural uranium transport
+    - "transport_U_nat": natural uranium transport (mine to conversion)
     - "conversion": conversion
+    - "transport_U_converted": converted uranium transport (conversion to enrichment)
     - "SWU": enrichment
-    - "transport_U_enriched": enriched uranium transport
+    - "transport_U_enriched": enriched uranium transport (enrichment to fabrication)
     - "fabrication": fuel fabrication
-    - "transport_fuel": fresh fuel transport
+    - "transport_fresh_fuel": fresh fuel transport (fabrication to reactor)
     - "back_end": back-end disposal
+    - "transport_spent_fuel": spent fuel transport (reactor to disposal)
     """
     r = costs.real_discount_rate
     
@@ -529,6 +564,8 @@ def main():
         price_SWU_per_SWU_USD=costs.price_SWU_per_SWU_USD,
         transport_U_nat_per_kg_per_km_USD=costs.transport_U_nat_per_kg_per_km_USD,
         distance_U_nat_transport_km=project.distance_U_nat_transport_km,
+        transport_U_converted_per_kgU_per_km_USD=costs.transport_U_converted_per_kgU_per_km_USD,
+        distance_U_converted_transport_km=project.distance_U_converted_transport_km,
     )
     fresh_fuel_mass_UO2_kg = annual_fresh_fuel_mass_kg(project)
 
@@ -560,8 +597,10 @@ def main():
     print(f"  cycle_length_years                : {project.cycle_length_years:.3f} years")
     print(f"  spent_fuel_backend                : {project.spent_fuel_backend}")
     print(f"  distance_U_nat_transport_km        : {project.distance_U_nat_transport_km:.0f} km")
+    print(f"  distance_U_converted_transport_km  : {project.distance_U_converted_transport_km:.0f} km")
     print(f"  distance_U_enriched_transport_km  : {project.distance_U_enriched_transport_km:.0f} km")
     print(f"  distance_fresh_fuel_transport_km   : {project.distance_fresh_fuel_transport_km:.0f} km")
+    print(f"  distance_spent_fuel_transport_km   : {project.distance_spent_fuel_transport_km:.0f} km")
     print()
 
     # ------------------------------------------------------------
@@ -578,8 +617,10 @@ def main():
     print(f"  fabrication_per_kgFreshFuel_USD   : {costs.fabrication_per_kgFreshFuel_USD:.1f} $/kg fresh fuel")
     print(f"  direct_disposal_per_kgSpentFuel_USD : {costs.direct_disposal_per_kgSpentFuel_USD:.1f} $/kg spent fuel")
     print(f"  transport_U_nat_per_kg_per_km_USD : {costs.transport_U_nat_per_kg_per_km_USD:.3e} $/kgU/km")
+    print(f"  transport_U_converted_per_kgU_per_km_USD : {costs.transport_U_converted_per_kgU_per_km_USD:.3e} $/kgU/km")
     print(f"  transport_U_enriched_per_kgU_per_km_USD : {costs.transport_U_enriched_per_kgU_per_km_USD:.3e} $/kgU/km")
     print(f"  transport_fuel_per_kgFreshFuel_per_km_USD : {costs.transport_fuel_per_kgFreshFuel_per_km_USD:.3e} $/kg/km")
+    print(f"  transport_spent_fuel_per_kg_per_km_USD : {costs.transport_spent_fuel_per_kg_per_km_USD:.3e} $/kg/km")
     print()
 
     # ------------------------------------------------------------

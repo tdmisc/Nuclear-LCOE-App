@@ -287,7 +287,15 @@ with tab2:
             value=float(default_project.distance_U_nat_transport_km),
             step=100.0,
             format="%.0f",
-            help="Distance for natural uranium transport"
+            help="Distance from mine to conversion plant"
+        )
+        distance_U_converted_transport_km = st.number_input(
+            "Converted Uranium Transport Distance (km)",
+            min_value=0.0,
+            value=float(default_project.distance_U_converted_transport_km),
+            step=100.0,
+            format="%.0f",
+            help="Distance from conversion plant to enrichment plant"
         )
         distance_U_enriched_transport_km = st.number_input(
             "Enriched Uranium Transport Distance (km)",
@@ -295,7 +303,7 @@ with tab2:
             value=float(default_project.distance_U_enriched_transport_km),
             step=100.0,
             format="%.0f",
-            help="Distance for enriched uranium transport"
+            help="Distance from enrichment plant to fuel fabrication plant"
         )
         distance_fresh_fuel_transport_km = st.number_input(
             "Fresh Fuel Transport Distance (km)",
@@ -303,7 +311,15 @@ with tab2:
             value=float(default_project.distance_fresh_fuel_transport_km),
             step=100.0,
             format="%.0f",
-            help="Distance for fresh fuel transport"
+            help="Distance from fuel fabrication plant to reactor site"
+        )
+        distance_spent_fuel_transport_km = st.number_input(
+            "Spent Fuel Transport Distance (km)",
+            min_value=0.0,
+            value=float(default_project.distance_spent_fuel_transport_km),
+            step=100.0,
+            format="%.0f",
+            help="Distance from reactor site to disposal/reprocessing facility"
         )
         
         st.markdown("**Transport Unit Costs**")
@@ -314,6 +330,14 @@ with tab2:
             step=1e-5,
             format="%.3e",
             help="Transport cost per kgU per km for natural uranium"
+        )
+        transport_U_converted_per_kgU_per_km_USD = st.number_input(
+            "Converted Uranium Transport ($/kgU/km)",
+            min_value=0.0,
+            value=float(default_costs.transport_U_converted_per_kgU_per_km_USD),
+            step=1e-5,
+            format="%.3e",
+            help="Transport cost per kgU per km for converted uranium"
         )
         transport_U_enriched_per_kgU_per_km_USD = st.number_input(
             "Enriched Uranium Transport ($/kgU/km)",
@@ -330,6 +354,14 @@ with tab2:
             step=1e-4,
             format="%.3e",
             help="Transport cost per kg per km for fresh fuel"
+        )
+        transport_spent_fuel_per_kg_per_km_USD = st.number_input(
+            "Spent Fuel Transport ($/kg/km)",
+            min_value=0.0,
+            value=float(default_costs.transport_spent_fuel_per_kg_per_km_USD),
+            step=1e-4,
+            format="%.3e",
+            help="Transport cost per kg per km for spent fuel"
         )
 
 with tab3:
@@ -372,8 +404,10 @@ if compute_button:
             cycle_length_years=cycle_length_years,
             spent_fuel_backend=spent_fuel_backend,
             distance_U_nat_transport_km=distance_U_nat_transport_km,
+            distance_U_converted_transport_km=distance_U_converted_transport_km,
             distance_U_enriched_transport_km=distance_U_enriched_transport_km,
             distance_fresh_fuel_transport_km=distance_fresh_fuel_transport_km,
+            distance_spent_fuel_transport_km=distance_spent_fuel_transport_km,
         )
         
         costs = CostParameters(
@@ -387,8 +421,10 @@ if compute_button:
             fabrication_per_kgFreshFuel_USD=fabrication_per_kgFreshFuel_USD,
             direct_disposal_per_kgSpentFuel_USD=direct_disposal_per_kgSpentFuel_USD,
             transport_U_nat_per_kg_per_km_USD=transport_U_nat_per_kg_per_km_USD,
+            transport_U_converted_per_kgU_per_km_USD=transport_U_converted_per_kgU_per_km_USD,
             transport_U_enriched_per_kgU_per_km_USD=transport_U_enriched_per_kgU_per_km_USD,
             transport_fuel_per_kgFreshFuel_per_km_USD=transport_fuel_per_kgFreshFuel_per_km_USD,
+            transport_spent_fuel_per_kg_per_km_USD=transport_spent_fuel_per_kg_per_km_USD,
         )
         
         # Run computations
@@ -404,6 +440,8 @@ if compute_button:
                 price_SWU_per_SWU_USD=costs.price_SWU_per_SWU_USD,
                 transport_U_nat_per_kg_per_km_USD=costs.transport_U_nat_per_kg_per_km_USD,
                 distance_U_nat_transport_km=project.distance_U_nat_transport_km,
+                transport_U_converted_per_kgU_per_km_USD=costs.transport_U_converted_per_kgU_per_km_USD,
+                distance_U_converted_transport_km=project.distance_U_converted_transport_km,
             )
             fresh_fuel_mass_UO2_kg = annual_fresh_fuel_mass_kg(project)
             
@@ -482,13 +520,15 @@ if compute_button:
                 "Dismantling (annualized)",
                 "OPEX (excluding fuel)",
                 "Fuel Cycle - Natural Uranium",
-                "Fuel Cycle - U_nat Transport",
+                "Fuel Cycle - Natural U Transport",
                 "Fuel Cycle - Conversion",
+                "Fuel Cycle - Converted U Transport",
                 "Fuel Cycle - Enrichment (SWU)",
-                "Fuel Cycle - U_enriched Transport",
+                "Fuel Cycle - Enriched U Transport",
                 "Fuel Cycle - Fabrication",
                 "Fuel Cycle - Fresh Fuel Transport",
                 "Fuel Cycle - Back-end Disposal",
+                "Fuel Cycle - Spent Fuel Transport",
                 "Fuel Cycle - Total",
                 "**Total Annual Cost**",
             ],
@@ -499,11 +539,13 @@ if compute_button:
                 fuel_breakdown.get("U_nat", 0) / 1e6,
                 fuel_breakdown.get("transport_U_nat", 0) / 1e6,
                 fuel_breakdown.get("conversion", 0) / 1e6,
+                fuel_breakdown.get("transport_U_converted", 0) / 1e6,
                 fuel_breakdown.get("SWU", 0) / 1e6,
                 fuel_breakdown.get("transport_U_enriched", 0) / 1e6,
                 fuel_breakdown.get("fabrication", 0) / 1e6,
-                fuel_breakdown.get("transport_fuel", 0) / 1e6,
+                fuel_breakdown.get("transport_fresh_fuel", 0) / 1e6,
                 fuel_breakdown.get("back_end", 0) / 1e6,
+                fuel_breakdown.get("transport_spent_fuel", 0) / 1e6,
                 fuel_annual / 1e6,
                 total_annual_cost / 1e6,
             ],
@@ -596,11 +638,13 @@ if compute_button:
                 "U_nat": "Natural Uranium",
                 "transport_U_nat": "Transport Natural U",
                 "conversion": "Conversion",
+                "transport_U_converted": "Transport Converted U",
                 "SWU": "Enrichment (SWU)",
                 "transport_U_enriched": "Transport Enriched U",
                 "fabrication": "Fabrication",
-                "transport_fuel": "Transport Fuel",
-                "back_end": "Back-end Disposal"
+                "transport_fresh_fuel": "Transport Fresh Fuel",
+                "back_end": "Back-end Disposal",
+                "transport_spent_fuel": "Transport Spent Fuel"
             }
             
             fuel_data = []

@@ -58,11 +58,13 @@ def optimize_front_end_uranium_cost(
     price_SWU_per_SWU_USD: float,
     transport_U_nat_per_kg_per_km_USD: float = 0.0,
     distance_U_nat_transport_km: float = 0.0,
+    transport_U_converted_per_kgU_per_km_USD: float = 0.0,
+    distance_U_converted_transport_km: float = 0.0,
     tails_min: float = 0.0005,
     n_steps: int = 500,
     ) -> dict:
     """
-    Optimize the front-end fuel cycle cost (natural U + transport + conversion + enrichment)
+    Optimize the front-end fuel cycle cost (natural U + natural U transport + conversion + converted U transport + enrichment)
     for a given required product mass.
 
     Arguments
@@ -83,6 +85,10 @@ def optimize_front_end_uranium_cost(
         Transport cost per kgU per km for natural uranium ($/kgU/km).
     distance_U_nat_transport_km : float
         Transport distance for natural uranium (km).
+    transport_U_converted_per_kgU_per_km_USD : float
+        Transport cost per kgU per km for converted uranium ($/kgU/km).
+    distance_U_converted_transport_km : float
+        Transport distance for converted uranium (km).
     tails_min : float
         Minimum tails assay to scan (U-235 fraction in tails).
     n_steps : int
@@ -96,6 +102,7 @@ def optimize_front_end_uranium_cost(
         - "cost_U_nat_USD"      : cost of natural uranium ($)
         - "cost_transport_U_nat_USD" : cost of natural uranium transport ($)
         - "cost_conversion_USD" : cost of conversion ($)
+        - "cost_transport_U_converted_USD" : cost of converted uranium transport ($)
         - "cost_enrichment_USD" : cost of enrichment ($)
     """
     if product_mass_kg <= 0:
@@ -135,9 +142,11 @@ def optimize_front_end_uranium_cost(
         cost_U_nat = feed_mass_kg * price_U_nat_per_kg_USD
         cost_transport_U_nat = feed_mass_kg * transport_U_nat_per_kg_per_km_USD * distance_U_nat_transport_km
         cost_conversion = feed_mass_kg * conversion_per_kgU_USD
+        # Converted uranium transport (after conversion, same mass as feed since conversion doesn't change mass)
+        cost_transport_U_converted = feed_mass_kg * transport_U_converted_per_kgU_per_km_USD * distance_U_converted_transport_km
         cost_enrichment = swu_required * price_SWU_per_SWU_USD
 
-        total_cost = cost_U_nat + cost_transport_U_nat + cost_conversion + cost_enrichment
+        total_cost = cost_U_nat + cost_transport_U_nat + cost_conversion + cost_transport_U_converted + cost_enrichment
 
         if total_cost < best_cost:
             best_cost = total_cost
@@ -147,6 +156,7 @@ def optimize_front_end_uranium_cost(
                 "cost_U_nat_USD": cost_U_nat,
                 "cost_transport_U_nat_USD": cost_transport_U_nat,
                 "cost_conversion_USD": cost_conversion,
+                "cost_transport_U_converted_USD": cost_transport_U_converted,
                 "cost_enrichment_USD": cost_enrichment,
             }
 
