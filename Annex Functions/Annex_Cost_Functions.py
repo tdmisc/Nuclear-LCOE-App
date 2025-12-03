@@ -61,7 +61,7 @@ def optimize_front_end_uranium_cost(
     transport_U_converted_per_kgU_per_km_USD: float = 0.0,
     distance_U_converted_transport_km: float = 0.0,
     tails_min: float = 0.0005,
-    n_steps: int = 500,
+    n_steps: int = 1000,
     ) -> dict:
     """
     Optimize the front-end fuel cycle cost (natural U + natural U transport + conversion + converted U transport + enrichment)
