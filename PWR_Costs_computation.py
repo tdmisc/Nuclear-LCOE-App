@@ -100,7 +100,7 @@ class CostParameters:
 
     # --- Front-end fuel cycle costs ---
     # Natural uranium
-    price_U_nat_per_kg_USD: float = 190.0
+    price_U_nat_per_kg_USD: float = 210.0
     transport_U_nat_per_kg_per_km_USD: float = 0.04e-3  # $/kgU/km
 
     # Conversion
@@ -108,7 +108,7 @@ class CostParameters:
     transport_U_converted_per_kgU_per_km_USD: float = 0.05e-3  # $/kgU/km
 
     # Enrichment (SWU)
-    price_SWU_per_SWU_USD: float = 140.0
+    price_SWU_per_SWU_USD: float = 160.0
     transport_U_enriched_per_kgU_per_km_USD: float = 1.0e-3  # $/kgU/km
 
     # Fuel fabrication
